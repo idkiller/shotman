@@ -132,7 +132,7 @@ export class GameApp {
 
     private app: PIXI.Application;
 
-    private modelKeys: Array<string>;
+    private monsterKeys: Array<string>;
     private models: { [id: string] : Array<PIXI.Texture> };
     private monsters: Array<PIXI.AnimatedSprite>;
     private mage: PIXI.AnimatedSprite;
@@ -172,7 +172,11 @@ export class GameApp {
 
         parent.replaceChild(this.app.view, parent.lastElementChild); // Hack for parcel HMR
 
-        this.mc = new Hammer.Manager(this.app.view, {recognizers: [[Hammer.Pan, {direction: Hammer.DIRECTION_ALL, threshold: 5}]]});
+        this.mc = new Hammer.Manager(this.app.view, {
+            recognizers: [
+                [Hammer.Pan, {direction: Hammer.DIRECTION_ALL, threshold: 5}]
+            ]
+        });
         this.mc.on('panmove', (ev: HammerInput) => {
             this.moveX = -Math.cos(ev.angle * Math.PI / 180) * this.step;
             this.moveY = -Math.sin(ev.angle * Math.PI / 180) * this.step;
@@ -189,22 +193,14 @@ export class GameApp {
     }
 
     private onAssetsLoaded() {
-
-        const mage = new PIXI.AnimatedSprite(this.loadSprite('mage', 2));
-        mage.x = this.app.screen.width / 2;
-        mage.y = this.app.screen.height / 2;
-        mage.anchor.set(0.5);
-        this.app.stage.addChild(mage);
-        mage.animationSpeed = 0.16;
-        mage.play();
-        this.mage = mage;
-
+        this.models['mage'] = this.loadSprite('mage', 2);
         this.models['ghost'] = this.loadSprite('ghost', 4);
         this.models['umaro'] = this.loadSprite('umaro', 4);
-        this.models['redstart'] = this.loadSprite('redstar', 4);
-        this.modelKeys = Object.keys(this.models);
-
+        this.models['redstar'] = this.loadSprite('redstar', 4);
+        this.monsterKeys = ['ghost', 'umaro', 'redstar'];
         this.bulletModels['bullet'] = this.loadSprite('bullet', 2);
+
+        this.reset();
 
         this.remainSpaingTime = this.spawningTime;
         this.bulletDelayRemain = this.bulletDelay;
@@ -214,36 +210,88 @@ export class GameApp {
                 this.remainSpaingTime = this.spawningTime;
             }
             if (!this.monsterMoves()) {
-                console.log('GAME OVER');
-
-                const style = new PIXI.TextStyle({
-                    fontFamily: 'Arial',
-                    fontSize: 60,
-                    fontStyle: 'italic',
-                    fontWeight: 'bold',
-                    fill: ['#ffffff', '#00ff99'], // gradient
-                    stroke: '#4a1850',
-                    strokeThickness: 5,
-                    dropShadow: true,
-                    dropShadowColor: '#000000',
-                    dropShadowBlur: 4,
-                    dropShadowAngle: Math.PI / 6,
-                    dropShadowDistance: 6,
-                    wordWrap: true,
-                    wordWrapWidth: 440,
-                    lineJoin: 'round'
-                });
-                const gameOver = new PIXI.Text('GAME OVER', style);
-                gameOver.anchor.set(0.5);
-                gameOver.x = this.app.screen.width / 2;
-                gameOver.y = this.app.screen.height / 2;
-                this.app.stage.addChild(gameOver);
-                this.app.stop();
+                this.end();
                 return;
             }
             
             this.shoot();
         });
+    }
+
+    private end() {
+        console.log('GAME OVER');
+        const style = new PIXI.TextStyle({
+            fontFamily: 'Arial',
+            fontSize: 60,
+            fontStyle: 'italic',
+            fontWeight: 'bold',
+            fill: ['#ffffff', '#ff3333'], // gradient
+            stroke: '#4a1850',
+            strokeThickness: 5,
+            dropShadow: true,
+            dropShadowColor: '#000000',
+            dropShadowBlur: 4,
+            dropShadowAngle: Math.PI / 6,
+            dropShadowDistance: 6,
+            lineJoin: 'round'
+        });
+        const gameOver = new PIXI.Text('GAME OVER', style);
+        gameOver.anchor.set(0.5);
+        gameOver.x = this.app.screen.width / 2;
+        gameOver.y = this.app.screen.height / 2;
+        this.app.stage.addChild(gameOver);
+
+        const gameOverRect = gameOver.getBounds();)
+
+        const style2 = new PIXI.TextStyle({
+            fontFamily: 'Arial',
+            fontSize: 40,
+            fontWeight: 'bold',
+            fill: ['#ffffff', '#00ff99'], // gradient
+            stroke: '#4a1850',
+            strokeThickness: 5,
+            dropShadow: true,
+            dropShadowColor: '#000000',
+            dropShadowBlur: 4,
+            dropShadowAngle: Math.PI / 6,
+            dropShadowDistance: 6,
+            lineJoin: 'round'
+        });
+        const restart = new PIXI.Text('Restart?', style2)
+        restart.anchor.set(0.5);
+        restart.x = gameOver.x;
+        restart.y = gameOverRect.bottom + 20;
+        this.app.stage.addChild(restart);
+        restart.interactive = true;
+        restart.buttonMode = true;
+        restart.on('pointerdown', () => this.reset());
+
+        this.app.stop();
+    }
+    private reset() {
+
+        if (this.app.stage.children.length > 0) {
+            this.app.stage.removeChildren();
+        }
+        if (this.monsters.length > 0) {
+            this.monsters.forEach(m => m.destroy());
+            this.monsters = [];
+        }
+        if (this.mage) {
+            this.mage.destroy();
+            this.mage = null;
+        }
+
+        this.app.start();
+
+        const mage = new PIXI.AnimatedSprite(this.models['mage']);
+        mage.x = this.app.screen.width / 2;
+        mage.y = this.app.screen.height / 2;
+        mage.anchor.set(0.5);
+        this.app.stage.addChild(mage);
+        mage.animationSpeed = 0.16;
+        mage.play();
+        this.mage = mage;
     }
 
     private shoot() {
@@ -321,29 +369,6 @@ export class GameApp {
         return [{x: p.x - dd * dx, y: p.y - dd * dy}, D];
     }
 
-    private keyListener() {
-        let mx = 0;
-        let my = 0;
-
-        if (this.moves & PanFlagLeft) {
-            mx += this.step;
-        }
-        if (this.moves & PanFlagRight) {
-            mx -= this.step;
-        }
-        if (this.moves & PanFlagUp) {
-            my += this.step;
-        }
-        if (this.moves & PanFlagDown) {
-            my -= this.step;
-        }
-        this.moves = 0;
-        for (let i=0; i<this.monsters.length; i++) {
-            this.monsters[i].x += mx;
-            this.monsters[i].y += my;
-        }
-    }
-
     private loadSprite(name: string, n: number) {
         const textures = [];
         for (let i=0; i<n; i++)
@@ -357,8 +382,8 @@ export class GameApp {
     private spawn() {
         let p = this.validPoints[Math.floor(Math.random() * this.validPoints.length)];
 
-        let mi = Math.floor(Math.random() * this.modelKeys.length);
-        const monster = new PIXI.AnimatedSprite(this.models[this.modelKeys[mi]]);
+        let mi = Math.floor(Math.random() * this.monsterKeys.length);
+        const monster = new PIXI.AnimatedSprite(this.models[this.monsterKeys[mi]]);
         this.monsters.push(monster);
         monster.anchor.set(0.5);
         monster.animationSpeed = 0.16;
