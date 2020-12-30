@@ -1,4 +1,5 @@
 import * as PIXI from 'pixi.js';
+import * as Hammer from 'hammerjs';
 
 interface Point {
     x: number;
@@ -115,6 +116,18 @@ class ClosePointHeap {
     }
 }
 
+const PanFlagLeft = 1;
+const PanFlagRight = 2;
+const PanFlagUp = 4;
+const PanFlagDown = 8;
+
+const PanEvents = {
+    'panleft': PanFlagLeft,
+    'panright': PanFlagRight,
+    'panup': PanFlagUp,
+    'pandown': PanFlagDown
+};
+
 export class GameApp {
 
     private app: PIXI.Application;
@@ -141,6 +154,11 @@ export class GameApp {
 
     private monsterHeap: ClosePointHeap;
 
+    private mc: HammerManager;
+
+    private moveX: number;
+    private moveY: number;
+
     constructor(parent: HTMLElement, width: number, height: number) {
         this.app = new PIXI.Application({width, height, backgroundColor : 0x000000});
         this.models = {};
@@ -153,6 +171,12 @@ export class GameApp {
         this.monsterHeap = new ClosePointHeap();
 
         parent.replaceChild(this.app.view, parent.lastElementChild); // Hack for parcel HMR
+
+        this.mc = new Hammer.Manager(this.app.view, {recognizers: [[Hammer.Pan, {direction: Hammer.DIRECTION_ALL, threshold: 5}]]});
+        this.mc.on('panmove', (ev: HammerInput) => {
+            this.moveX = -Math.cos(ev.angle * Math.PI / 180) * this.step;
+            this.moveY = -Math.sin(ev.angle * Math.PI / 180) * this.step;
+        });
 
         // init Pixi loader
         let loader = new PIXI.Loader();
@@ -182,13 +206,6 @@ export class GameApp {
 
         this.bulletModels['bullet'] = this.loadSprite('bullet', 2);
 
-        const action = this.KeyMap({
-            'ArrowUp': 'Up',
-            'ArrowDown': 'Down',
-            'ArrowLeft': 'Left',
-            'ArrowRight': 'Right'
-        });
-
         this.remainSpaingTime = this.spawningTime;
         this.bulletDelayRemain = this.bulletDelay;
         this.app.ticker.add((time: number) => {
@@ -196,7 +213,6 @@ export class GameApp {
                 this.spawn();
                 this.remainSpaingTime = this.spawningTime;
             }
-            this.keyListener(action());
             if (!this.monsterMoves()) {
                 console.log('GAME OVER');
 
@@ -282,6 +298,8 @@ export class GameApp {
         this.monsterHeap.clear();
         for (let i =0; i<this.monsters.length; i++) {
             const m = this.monsters[i];
+            m.x += this.moveX;
+            m.y += this.moveY;
             const range = this.moveToMage({x: m.x, y: m.y}, this.monsterStep);
             m.x = range[0].x;
             m.y = range[0].y;
@@ -291,6 +309,7 @@ export class GameApp {
             }
             this.monsterHeap.push({index: i, range: range[1]});
         }
+        this.moveX = this.moveY = 0;
         return true;
     }
 
@@ -302,33 +321,27 @@ export class GameApp {
         return [{x: p.x - dd * dx, y: p.y - dd * dy}, D];
     }
 
-    private keyListener(set) {
+    private keyListener() {
         let mx = 0;
         let my = 0;
-        if (set.has('Up')) {
-            my += this.step;
-        }
-        if (set.has('Down')) {
-            my -= this.step;
-        }
-        if (set.has('Left')) {
+
+        if (this.moves & PanFlagLeft) {
             mx += this.step;
         }
-        if (set.has('Right')) {
+        if (this.moves & PanFlagRight) {
             mx -= this.step;
         }
-
+        if (this.moves & PanFlagUp) {
+            my += this.step;
+        }
+        if (this.moves & PanFlagDown) {
+            my -= this.step;
+        }
+        this.moves = 0;
         for (let i=0; i<this.monsters.length; i++) {
             this.monsters[i].x += mx;
             this.monsters[i].y += my;
         }
-    }
-
-    private KeyMap(map) {
-        const pressing = new Set();
-        window.addEventListener("keydown", ({key}) => map[key] && pressing.add(map[key]));
-        window.addEventListener("keyup", ({key}) => map[key] && pressing.delete(map[key]));
-        return () => pressing;
     }
 
     private loadSprite(name: string, n: number) {
